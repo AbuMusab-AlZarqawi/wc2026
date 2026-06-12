@@ -1,0 +1,78 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --red: #EF4444;
+  --navy: #0B1120;
+  --navy2: #111827;
+  --gold: #F59E0B;
+  --white: #F9FAFB;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: #080C14;
+  color: #F9FAFB;
+  font-family: 'Inter', sans-serif;
+  overflow-x: hidden;
+  min-height: 100vh;
+}
+
+.font-anton { font-family: 'Anton', sans-serif; letter-spacing: 0.02em; }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #080C14; }
+::-webkit-scrollbar-thumb { background: #EF4444; border-radius: 3px; }
+
+/* Glow utilities */
+.glow-red    { box-shadow: 0 0 24px #EF444455, 0 0 8px #EF444433; }
+.glow-gold   { box-shadow: 0 0 24px #F59E0B55, 0 0 8px #F59E0B33; }
+.glow-white  { box-shadow: 0 0 24px #ffffff22, 0 0 8px #ffffff11; }
+
+/* Card flip animation */
+@keyframes cardFlipIn {
+  0%   { transform: rotateY(90deg) scale(0.8); opacity: 0; }
+  60%  { transform: rotateY(-8deg) scale(1.05); opacity: 1; }
+  100% { transform: rotateY(0deg) scale(1); opacity: 1; }
+}
+.card-flip-in { animation: cardFlipIn 0.55s cubic-bezier(0.22,1,0.36,1) forwards; }
+
+/* Shimmer */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+  background-size: 200% auto;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Pulse ring */
+@keyframes pulseRing {
+  0%   { transform: scale(1);   opacity: 0.8; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+.pulse-ring {
+  animation: pulseRing 1.5s ease-out infinite;
+}
+
+/* Float */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-10px); }
+}
+.float { animation: float 3s ease-in-out infinite; }
+
+/* Pitch lines */
+@keyframes pitchScan {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
