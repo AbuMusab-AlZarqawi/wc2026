@@ -2,25 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 
 const SYSTEM_PROMPT = `You are a dramatic, cinematic football match commentator and simulator. Your job is to simulate a football match between two teams and return a structured JSON result.
 
-CRITICAL RULES — READ CAREFULLY:
-- Every single match MUST have a UNIQUE, UNPREDICTABLE scoreline. Never repeat the same score.
-- Scorelines must vary wildly: sometimes 1-0, sometimes 3-2, sometimes 5-1, sometimes 0-0 going to penalties, sometimes 4-3. No pattern, no defaults.
-- The number of goals in the goals array MUST exactly equal homeScore + awayScore. Count them carefully.
-- Spread goals across different minutes throughout 1-90. Never cluster them all in the same range.
-- Use different goal types each match — vary between: goal, penalty, own goal, free kick, header, volley, screamer.
-- Different players must score in different matches — rotate who gets the goals, do not always use the same scorers.
-- If the match ends in a draw after 90 minutes, you MUST simulate a penalty shootout and declare a winner.
-- The MVP can come from either team — sometimes pick an AI player as MVP.
-- All goalscorers from the home team MUST be real players from the roster provided.
-- The AI Team has no named players — refer to them as: "AI striker", "AI midfielder", "AI defender", "AI winger", "AI forward".
-- The narrative must feel cinematic and dramatic — like a movie, not a sports report.
+CRITICAL RULES:
+- Every match MUST have a UNIQUE, UNPREDICTABLE scoreline. Never repeat the same score.
+- The number of goals in the goals array MUST exactly equal homeScore + awayScore.
+- Spread goals across different minutes throughout 1-90.
+- Use different goal types each match: goal, penalty, own goal, free kick, header, volley, screamer.
+- Different players must score in different matches — rotate scorers randomly.
+- If the match ends in a draw after 90 minutes, simulate a penalty shootout.
+- MVP can come from either team.
+- All home team goalscorers MUST be real players from the roster provided.
+- AI Team scorers: "AI striker", "AI midfielder", "AI defender", "AI winger", "AI forward".
+- Keep tacticalSummary under 200 characters. Keep mvp.description under 200 characters. This is critical to avoid token overflow.
 
 OUTPUT FORMAT:
-Return ONLY a valid JSON object. No markdown. No backticks. No explanation. No text before or after the JSON.
+Return ONLY valid JSON. No markdown. No backticks. No explanation.
 
-The JSON must follow this exact schema:
 {
-  "homeTeam": "string — the user team name",
+  "homeTeam": "string",
   "awayTeam": "AI Team",
   "homeScore": number,
   "awayScore": number,
@@ -31,30 +29,58 @@ The JSON must follow this exact schema:
     "awayScore": number,
     "winner": "string or null"
   },
-  "winner": "string — winning team name after penalties if applicable",
+  "winner": "string",
   "goals": [
     {
       "minute": number,
       "scorer": "string",
       "team": "string",
-      "type": "string — one of: goal, penalty, own goal, free kick, header, volley, screamer"
+      "type": "string"
     }
   ],
   "mvp": {
     "name": "string",
     "team": "string",
     "rating": number,
-    "description": "string — 2-3 cinematic sentences"
+    "description": "string — max 180 characters"
   },
-  "tacticalSummary": "string — 3-4 cinematic sentences unique to this match",
-  "matchMood": "string — one word from: Breathtaking, Ruthless, Chaotic, Gritty, Dominant, Miraculous, Electric, Tense, Dramatic, Ferocious, Scrappy, Stunning"
+  "tacticalSummary": "string — max 220 characters",
+  "matchMood": "string — one word only"
 }`;
 
-const SCORE_POOL = [
+const SCORE_POOL: [number, number][] = [
   [1,0],[2,1],[3,0],[0,1],[1,2],[2,0],[3,2],[4,1],[2,3],[0,2],
   [1,1],[2,2],[3,3],[0,0],[3,1],[4,2],[5,1],[1,4],[2,4],[5,3],
-  [1,3],[4,3],[0,3],[6,1],[3,4],[1,5],[2,2],[0,4],[4,0],[3,3],
+  [1,3],[4,3],[0,3],[6,1],[3,4],[1,5],[4,0],[3,3],[0,4],[2,5],
 ];
+
+// Attempt to salvage truncated JSON by closing any open strings/braces
+function tryRepairJSON(raw: string): string {
+  let s = raw.trim();
+  // Remove trailing comma if present
+  s = s.replace(/,\s*$/, "");
+  // Count unclosed braces and brackets
+  let braces = 0;
+  let brackets = 0;
+  let inString = false;
+  let escape = false;
+  for (const ch of s) {
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"' && !escape) { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === "{") braces++;
+    if (ch === "}") braces--;
+    if (ch === "[") brackets++;
+    if (ch === "]") brackets--;
+  }
+  // Close any open string
+  if (inString) s += '"';
+  // Close open arrays then objects
+  for (let i = 0; i < brackets; i++) s += "]";
+  for (let i = 0; i < braces; i++) s += "}";
+  return s;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -64,7 +90,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
     }
 
-    // Random seed and suggested score — forces unique output every call
     const seed = Math.floor(Math.random() * 999999);
     const [sHome, sAway] = SCORE_POOL[Math.floor(Math.random() * SCORE_POOL.length)];
     const isDraw = sHome === sAway;
@@ -72,19 +97,18 @@ export async function POST(req: NextRequest) {
     const userPrompt = `MATCH SEED: ${seed}
 
 HOME TEAM: "${teamName}"
-HOME FORMATION: ${formation}
+FORMATION: ${formation}
 HOME SQUAD:
 ${players.map((p: string, i: number) => `${i + 1}. ${p}`).join("\n")}
 
 AWAY TEAM: "AI Team"
 
-REQUIRED SCORELINE: ${sHome}-${sAway} (home-away)
-- homeScore MUST be ${sHome}
-- awayScore MUST be ${sAway}
-- goals array MUST contain exactly ${sHome + sAway} goal objects
-${isDraw ? "- This is a draw — simulate a penalty shootout to determine the winner" : ""}
-
-Distribute goal minutes randomly across 1-90 minutes. Pick scorers from the squad randomly — do not always use the same players. Make the tactical summary and match narrative completely unique. Return only the JSON object.`;
+REQUIRED SCORELINE: home ${sHome} - away ${sAway}
+- homeScore MUST be ${sHome}, awayScore MUST be ${sAway}
+- goals array MUST have exactly ${sHome + sAway} items
+${isDraw ? "- Draw — include penalty shootout" : ""}
+- Keep ALL text fields short (under 200 chars each) to avoid truncation
+- Return ONLY the JSON object, nothing else`;
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -94,7 +118,7 @@ Distribute goal minutes randomly across 1-90 minutes. Pick scorers from the squa
       },
       body: JSON.stringify({
         model: "llama-3.3-70b-versatile",
-        max_tokens: 1400,
+        max_tokens: 2000,
         temperature: 1.2,
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
@@ -112,12 +136,32 @@ Distribute goal minutes randomly across 1-90 minutes. Pick scorers from the squa
     const data = await response.json();
     const raw = data.choices?.[0]?.message?.content || "";
     const clean = raw.replace(/```json|```/g, "").trim();
-    const result = JSON.parse(clean);
+
+    let result;
+    try {
+      result = JSON.parse(clean);
+    } catch {
+      // Attempt JSON repair on truncated response
+      console.warn("JSON parse failed, attempting repair...");
+      try {
+        result = JSON.parse(tryRepairJSON(clean));
+        console.log("JSON repair succeeded");
+      } catch (repairErr) {
+        console.error("JSON repair also failed:", repairErr);
+        console.error("Raw response:", clean.slice(0, 500));
+        return NextResponse.json({ error: "Match simulation returned invalid data. Please try again." }, { status: 500 });
+      }
+    }
 
     // Safety: ensure goal count matches scoreline
-    const expectedGoals = (result.homeScore ?? sHome) + (result.awayScore ?? sAway);
-    if (result.goals && result.goals.length !== expectedGoals) {
-      result.goals = result.goals.slice(0, expectedGoals);
+    const totalGoals = (result.homeScore ?? sHome) + (result.awayScore ?? sAway);
+    if (Array.isArray(result.goals) && result.goals.length > totalGoals) {
+      result.goals = result.goals.slice(0, totalGoals);
+    }
+
+    // Ensure penaltyShootout always exists
+    if (!result.penaltyShootout) {
+      result.penaltyShootout = { occurred: false, homeScore: 0, awayScore: 0, winner: null };
     }
 
     return NextResponse.json(result);
