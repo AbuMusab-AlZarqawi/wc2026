@@ -95,7 +95,7 @@ export default function LandingScreen() {
           position: "absolute", inset: 0, zIndex: 0,
           backgroundImage: "url('/field.png')",
           backgroundSize: "cover", backgroundPosition: "center",
-          opacity: 0.18,
+          opacity: 0.4,
           filter: "saturate(1.4)",
         }} />
         <div style={{
